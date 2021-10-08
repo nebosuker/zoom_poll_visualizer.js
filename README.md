@@ -5,6 +5,9 @@ Parses poll report CSV and visualize polls.
 - Automatically detect single-answer / multiple-answer
 - Can handle multiple polls in poll group.
 
+# Demo
+https://nebosuker.net/zoom_poll_visualizer/
+
 # usage
 Just include JS, and use `bancho-zoom-poll-visualizer` element.
 ```
