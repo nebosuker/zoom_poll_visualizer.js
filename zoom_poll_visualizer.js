@@ -16,17 +16,22 @@ class BanchoZoomPollVisualizer extends HTMLElement {
 
 
 	// output display element
-	#outputElem = null;
+	#outputElem;
 	// note display element (not using now?)
-	#noteElem = null;
+	#noteElem;
 
-	// parsed CSV data
-	#csvData = [];
-	// processed polls data
-	#pollData = [];
+	// see initializeData()
+	#csvData;
+	#polls;
+	#pollData;
+	#csvFormat;
+	#pollTitles2020;
+	#pollResStartCol;
 
-	// col number where poll result data starts
-	#pollResStartCol = 4;
+	// Zoom export formats
+	#csvFormat2020 = 1;
+	#csvFormat2021 = 2;
+
 
 	// chart options
 	#chartOptions = {
@@ -164,7 +169,7 @@ label{
 
 		const processCsv = csvdata => {
 			let state = 'initial';
-			let polls = [];
+
 			let lastRow = false;
 			csvdata.forEach ((row) => {
 				lastRow = row;
@@ -173,53 +178,114 @@ label{
 				case 'initial':
 					if (row[0] == '#') {
 						state = 'poll';
-						polls = initPoll(row);
+						initPolls(row);
+						if (!this.#polls.length) {
+							this.#csvFormat = this.#csvFormat2020;
+						}
 					}
 					break;
 			
 				case 'poll':
 					if (row[0] == '#') {
-						appendPollData(polls, row);
-						polls = initPoll(row);
+						appendPollData(row);
+						initPolls(row);
 					}
 					else {
-						polls = processPollData(row, polls);
+						processPollData(row);
 					}
 					break;
 				}
 			});
-			appendPollData(polls, lastRow);
+			appendPollData(lastRow);
 //console.log(this.#pollData);
 		}
 
 
-		const initPoll = row => {
-			const polls = [];
+		const initPolls = row => {
+			this.#polls = [];
 			let col = this.#pollResStartCol;
 			while (row[col]) {
-				let poll = {};
+				let poll = getPollTemplate();
 				poll.title = row[col];
-				poll.result = {};
-				poll.numResponse = 0;
-				poll.multiple = false;
-				polls.push(poll);
+				this.#polls.push(poll);
 				col++;
 			}
-			return polls;
+		}
+		
+		
+		const getPollTemplate = () => {
+			return {
+				title : '',
+				result : {},
+				numResponse : 0,
+				multiple : false,
+			};
 		}
 
 
-		const appendPollData = (polls, row) => {
-			if (polls && polls.length) {
-				Object.keys(polls).forEach(k => {
-				});
-				this.#pollData.push(polls);
+		const appendPollData = (row) => {
+			if (this.#polls && this.#polls.length) {
+				this.#pollData.push(this.#polls);
 			}
-			polls = initPoll(row);
+			initPolls(row);
 		};
 
 
-		const processPollData = (row, polls) => {
+		const processPollData = (row) => {
+console.log(this.#csvFormat);
+			switch (this.#csvFormat) {
+			case this.#csvFormat2020:
+				processPollData2020(row);
+				break;
+			case this.#csvFormat2021:
+				processPollData2021(row);
+				break;
+			default:
+				throw 'unknown #csvFormat: ' + this.#csvFormat;
+				break;
+			}
+		}
+
+		const getPollIdFromPollTitle2020 = (pollTitle) => {
+			let pollId = null;
+			this.#pollTitles2020.some((title, key) => {
+				if (pollTitle == title) {
+					pollId = key;
+					return true;
+				}
+			});
+			if (pollId == null) {
+				this.#pollTitles2020.push(pollTitle);
+				pollId = getPollIdFromPollTitle2020(pollTitle);
+				this.#polls[pollId] = getPollTemplate();
+				this.#polls[pollId].title = pollTitle;
+			}
+			return pollId;
+		}
+
+		const processPollData2020 = (row) => {
+			let pollTitle, responses;
+			let pollId;
+			
+			pollTitle = row[this.#pollResStartCol];
+			if (pollTitle) {
+				pollId = getPollIdFromPollTitle2020(pollTitle);
+				
+				responses = row[this.#pollResStartCol + 1];
+				if (!this.#polls[pollId].multiple && responses.match(/;/)) {
+					this.#polls[pollId].multiple = true;
+				}
+				responses.split(';').forEach(res => {
+					if ('undefined' == typeof(this.#polls[pollId].result[res])) {
+						this.#polls[pollId].result[res] = 0;
+					}
+					this.#polls[pollId].result[res]++;
+				})
+				this.#polls[pollId].numResponse++;
+			}
+		}
+
+		const processPollData2021 = (row) => {
 			let responses;
 			let pollId;
 			let col = this.#pollResStartCol;
@@ -232,19 +298,21 @@ label{
 				) {
 					continue;
 				}
-				if (!polls[pollId].multiple && responses.match(/;/)) {
-					polls[pollId].multiple = true;
+				if ('undefined' == typeof(this.#polls[pollId])) {
+					this.#polls[pollId] = getPollTemplate();
+				}
+				if (!this.#polls[pollId].multiple && responses.match(/;/)) {
+					this.#polls[pollId].multiple = true;
 				}
 				responses.split(';').forEach(res => {
-					if ('undefined' == typeof(polls[pollId].result[res])) {
-						polls[pollId].result[res] = 0;
+					if ('undefined' == typeof(this.#polls[pollId].result[res])) {
+						this.#polls[pollId].result[res] = 0;
 					}
-					polls[pollId].result[res]++;
+					this.#polls[pollId].result[res]++;
 				})
-				polls[pollId].numResponse++;
+				this.#polls[pollId].numResponse++;
 				col++;
 			}
-			return polls;
 		}
 
 
@@ -341,8 +409,23 @@ label{
       }
 		}
 
+		const initializeData = () => {
+			// parsed CSV data
+			this.#csvData = [];
+			// processing polls data
+			this.#polls = [];
+			// processed data of array of polls
+			this.#pollData = [];
+			// Zoom export formats
+			this.#csvFormat = this.#csvFormat2021;	// initialize
+			// used when #csvFormat == #csvFormat2020
+			this.#pollTitles2020 = [];
+			// col number where poll result data starts
+			this.#pollResStartCol = 4;
+		}
 
 	  const parseCsv = file => {
+	  	initializeData();
 			const reader = new FileReader()
 			reader.readAsText(file)
 			reader.onload = () => {
