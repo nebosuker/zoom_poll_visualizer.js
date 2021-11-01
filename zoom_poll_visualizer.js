@@ -158,6 +158,8 @@ label{
 		const shadow = this.shadowRoot;
 
     const showError = (err) => {
+console.log(err);
+console.log(this.#outputElem);
 	    if (!this.#outputElem) {
 	    	alert("エラーが発生しました：\n" + err);
 	    }
@@ -168,35 +170,45 @@ label{
 
 
 		const processCsv = csvdata => {
-			let state = 'initial';
+			try{
+				let state = 'initial';
 
-			let lastRow = false;
-			csvdata.forEach ((row) => {
-				lastRow = row;
-				switch (state) {
+				let lastRow = false;
+				csvdata.forEach ((row) => {
+					lastRow = row;
+					switch (state) {
 
-				case 'initial':
-					if (row[0] == '#') {
-						state = 'poll';
-						initPolls(row);
-						if (!this.#polls.length) {
-							this.#csvFormat = this.#csvFormat2020;
+					case 'initial':
+						if (row[0] == '#') {
+							state = 'poll';
+							initPolls(row);
+							if (!this.#polls.length) {
+								this.#csvFormat = this.#csvFormat2020;
+							}
 						}
+						break;
+				
+					case 'poll':
+						if (row[0] == '#') {
+							appendPollData(row);
+							initPolls(row);
+						}
+						else {
+							processPollData(row);
+						}
+						break;
 					}
-					break;
-			
-				case 'poll':
-					if (row[0] == '#') {
-						appendPollData(row);
-						initPolls(row);
-					}
-					else {
-						processPollData(row);
-					}
-					break;
+				});
+				appendPollData(lastRow);
+				
+				if (state == 'initial') {
+					throw 'Zoomの投票CSVではないようです';
 				}
-			});
-			appendPollData(lastRow);
+				return true;
+			}
+	    catch(err) {
+	      showError(err);
+	    }
 //console.log(this.#pollData);
 		}
 
@@ -232,7 +244,7 @@ label{
 
 
 		const processPollData = (row) => {
-console.log(this.#csvFormat);
+console.log('#csvFormat',this.#csvFormat);
 			switch (this.#csvFormat) {
 			case this.#csvFormat2020:
 				processPollData2020(row);
@@ -426,46 +438,70 @@ console.log(this.#csvFormat);
 
 	  const parseCsv = file => {
 	  	initializeData();
-			const reader = new FileReader()
-			reader.readAsText(file)
-			reader.onload = () => {
-				const csvData = Papa.parse(reader.result, {});
-				if (
-					!csvData ||
-					!csvData.data ||
-					'undefined' == typeof(csvData.data) ||
-					!csvData.data.length
-				) {
-					throw '[1] Could not parse csv.';
-					return;
-				}
+	  	try{
+				const reader = new FileReader()
+				reader.readAsText(file)
+				reader.onload = () => {
+			  	try{
+						const csvData = Papa.parse(reader.result, {});
+						if (
+							!csvData ||
+							!csvData.data ||
+							'undefined' == typeof(csvData.data) ||
+							!csvData.data.length
+						) {
+							throw '[1] Could not parse selected file as csv.';
+							return;
+						}
 //console.log(csvData);
-				this.#csvData = csvData.data;
-				processCsv(this.#csvData);
+						this.#csvData = csvData.data;
+						if (processCsv(this.#csvData)) {
 
-	      this.#outputElem.innerHTML = '';
-	      google.charts.load('visualization', '1', {
-	        'packages' : [ 'corechart' ],
-		    });
-		    google.charts.setOnLoadCallback(() => {
-		    	visualizePollData(this.#pollData);
-		    });;
-				return true;
+				      this.#outputElem.innerHTML = '';
+				      google.charts.load('visualization', '1', {
+				        'packages' : [ 'corechart' ],
+					    });
+					    google.charts.setOnLoadCallback(() => {
+					    	visualizePollData(this.#pollData);
+					    });;
+							return true;
+						}
+					}
+			    catch(err) {
+			      showError(err);
+			    }
+				}
 			}
+	    catch(err) {
+	      showError(err);
+	    }
 	  };
 		
 
 	  const selectFile = evt => {
 	    try{
 				const files = evt.target.files;
+				let errMsg = '';
 //console.log(files);
-				if (files[0].size) {
-					parseCsv(files[0]);
+//console.log(files[0].type);
+//console.log(files.length);
+				if (!files.length) {
+					throw 'ファイルを選択してください'
+				}
+				switch (files[0].type) {
+				case 'application/vnd.ms-excel':
+					break;
+				default:
+					throw '選択するファイルは.CSVにしてください'
+					break;
+				}
+				if (!files[0].size) {
+					throw '選択したファイルの中身が空です'
 				}
         this.#outputElem.innerHTML = '';
+				parseCsv(files[0]);
 	    }
 	    catch(err) {
-console.log(err);
 	      showError(err);
 	    }
 	  };
