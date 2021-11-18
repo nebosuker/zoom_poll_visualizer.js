@@ -125,20 +125,32 @@ label{
 	margin: 2rem;
 	font-size: .9rem;
 }
-.bancho-zoom-poll-visualizer-chart-toc-item{
+.${this.prefix('chart-toc-item')}{
 	display: block;
 }
-.bancho-zoom-poll-visualizer-chart-toc-item--level-0{
+.${this.prefix('chart-toc-item--level-0')}{
 }
-.bancho-zoom-poll-visualizer-chart-toc-item--level-1{
+.${this.prefix('chart-toc-item--level-1')}{
 	margin-left: 1em;
 }
-.bancho-zoom-poll-visualizer-group-wrapper{
+.${this.prefix('group-wrapper')}{
 	margin: 4rem 0;
 }
-.bancho-zoom-poll-visualizer-chart-wrapper{
+.${this.prefix('chart-wrapper')}{
 	margin: 2rem 0;
 	height: 60vh;
+	position: relative;
+}
+.${this.prefix('chart-num-response')}{
+	position: absolute;
+	bottom: 0;
+	right: 50%;
+}
+.${this.prefix('chart-num-response')}::before{
+	content: "回答数：";
+}
+.${this.prefix('chart-num-response')}::after{
+	content: "件";
 }
 .flashOnce{
   animation: flash 1s linear;
@@ -341,11 +353,11 @@ console.log('#csvFormat',this.#csvFormat);
 					this.#polls[pollId].result[res] = 0;
 				}
 				this.#polls[pollId].result[res]++;
-			})
+			});
 		}
 
 
-		const visualizePollData = pollData => {
+		const visualizePollData = (pollData) => {
 //console.log(pollData);
 
 			const wrapperElem = document.createElement('div');
@@ -373,11 +385,25 @@ console.log('#csvFormat',this.#csvFormat);
 				});
 
 				polls.forEach((poll, ii) => {
-					const chartId = this.prefix(`chart-wrapper-${groupId}-${ii}`);
+					const charWrappertId = this.prefix(`chart-wrapper-${groupId}-${ii}-wrapper`);
 					const chartWrapperElem = document.createElement('section');
 					chartWrapperElem.setAttribute('class', this.prefix('chart-wrapper'));
-					chartWrapperElem.setAttribute('id', chartId);
+					chartWrapperElem.setAttribute('id', charWrappertId);
 					groupWrapperElem.appendChild(chartWrapperElem);
+
+					const chartId = this.prefix(`chart-wrapper-${groupId}-${ii}`);
+					const chartElem = document.createElement('section');
+					chartElem.setAttribute('class', this.prefix('chart-wrapper'));
+					chartElem.setAttribute('id', chartId);
+					chartWrapperElem.appendChild(chartElem);
+
+					const numResponse = poll.numResponse;
+					const numResponseId = this.prefix(`chart-numResponse-${groupId}-${ii}`);
+					const numResponseElem = document.createElement('div');
+					numResponseElem.setAttribute('class', this.prefix('chart-num-response'));
+					numResponseElem.setAttribute('id', numResponseId);
+					numResponseElem.textContent = numResponse;
+					chartWrapperElem.appendChild(numResponseElem);
 
 					const data = new google.visualization.DataTable();
 					data.addColumn('string', '選択肢');
@@ -388,6 +414,9 @@ console.log('#csvFormat',this.#csvFormat);
 					data.sort([
 						{column: 1, desc: true},
 					]);
+
+					// overlay
+					// https://developers.google.com/chart/interactive/docs/overlays#overview
 
 					const chartMethod = poll.multiple ? 'BarChart' : 'PieChart';
 					const chartOptions = Object.assign(
