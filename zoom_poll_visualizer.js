@@ -174,7 +174,7 @@ console.log(this.#outputElem);
 				let state = 'initial';
 
 				let lastRow = false;
-				csvdata.forEach ((row) => {
+				csvdata.forEach ((row, k) => {
 					lastRow = row;
 					switch (state) {
 
@@ -190,10 +190,23 @@ console.log(this.#outputElem);
 				
 					case 'poll':
 						if (row[0] == '#') {
-							appendPollData(row);
+							appendPollData();
 							initPolls(row);
 						}
 						else {
+							// 2020では投票切り替わりにヘッダー行がない
+							switch (this.#csvFormat) {
+							case this.#csvFormat2020:
+								const pollTitle = row[this.#pollResStartCol];
+								if (
+									getPollIdFromPollTitle2020(pollTitle) == null &&
+									this.#polls.length > 0
+								) {
+									appendPollData();
+									initPolls([]);	// initPolls()はヘッダー行を期待してるので2020では空の配列を渡す
+								}
+								break;
+							}
 							processPollData(row);
 						}
 						break;
@@ -235,11 +248,10 @@ console.log(this.#outputElem);
 		}
 
 
-		const appendPollData = (row) => {
+		const appendPollData = () => {
 			if (this.#polls && this.#polls.length) {
 				this.#pollData.push(this.#polls);
 			}
-			initPolls(row);
 		};
 
 
@@ -266,34 +278,38 @@ console.log('#csvFormat',this.#csvFormat);
 					return true;
 				}
 			});
-			if (pollId == null) {
-				this.#pollTitles2020.push(pollTitle);
-				pollId = getPollIdFromPollTitle2020(pollTitle);
-				this.#polls[pollId] = getPollTemplate();
-				this.#polls[pollId].title = pollTitle;
-			}
+			return pollId;
+		}
+		const addPollIdFromPollTitle2020 = (pollTitle) => {
+			let pollId = null;
+			this.#pollTitles2020.push(pollTitle);
+			pollId = getPollIdFromPollTitle2020(pollTitle);
+			this.#polls[pollId] = getPollTemplate();
+			this.#polls[pollId].title = pollTitle;
 			return pollId;
 		}
 
 		const processPollData2020 = (row) => {
-			let pollTitle, responses;
+			let pollTitle;
+			let responses;
 			let pollId;
-			
-			pollTitle = row[this.#pollResStartCol];
-			if (pollTitle) {
-				pollId = getPollIdFromPollTitle2020(pollTitle);
-				
-				responses = row[this.#pollResStartCol + 1];
-				if (!this.#polls[pollId].multiple && responses.match(/;/)) {
-					this.#polls[pollId].multiple = true;
-				}
-				responses.split(';').forEach(res => {
-					if ('undefined' == typeof(this.#polls[pollId].result[res])) {
-						this.#polls[pollId].result[res] = 0;
+			let col = this.#pollResStartCol;
+			while (row[col]) {
+				pollTitle = row[col];
+				if (pollTitle) {
+					pollId = getPollIdFromPollTitle2020(pollTitle);
+					if (pollId == null) {
+						pollId = addPollIdFromPollTitle2020(pollTitle);
 					}
-					this.#polls[pollId].result[res]++;
-				})
-				this.#polls[pollId].numResponse++;
+					col++;
+					responses = row[col];
+					if (!responses ||'undefined' == typeof(responses)) {
+						continue;
+					}
+					processPollAnswerCell(responses, pollId);
+					this.#polls[pollId].numResponse++;
+				}
+				col++;
 			}
 		}
 
@@ -304,27 +320,28 @@ console.log('#csvFormat',this.#csvFormat);
 			while (row[col]) {
 				pollId = col - this.#pollResStartCol;
 				responses = row[col];
-				if (
-					!responses ||
-					'undefined' == typeof(responses)
-				) {
+				if (!responses ||'undefined' == typeof(responses)) {
 					continue;
 				}
 				if ('undefined' == typeof(this.#polls[pollId])) {
 					this.#polls[pollId] = getPollTemplate();
 				}
-				if (!this.#polls[pollId].multiple && responses.match(/;/)) {
-					this.#polls[pollId].multiple = true;
-				}
-				responses.split(';').forEach(res => {
-					if ('undefined' == typeof(this.#polls[pollId].result[res])) {
-						this.#polls[pollId].result[res] = 0;
-					}
-					this.#polls[pollId].result[res]++;
-				})
+				processPollAnswerCell(responses, pollId);
 				this.#polls[pollId].numResponse++;
 				col++;
 			}
+		}
+
+		const processPollAnswerCell = (responseCell, pollId) => {
+			if (!this.#polls[pollId].multiple && responseCell.match(/;/)) {
+				this.#polls[pollId].multiple = true;
+			}
+			responseCell.split(';').forEach(res => {
+				if ('undefined' == typeof(this.#polls[pollId].result[res])) {
+					this.#polls[pollId].result[res] = 0;
+				}
+				this.#polls[pollId].result[res]++;
+			})
 		}
 
 
@@ -337,10 +354,10 @@ console.log('#csvFormat',this.#csvFormat);
 
 			const toc = [];
 
-      pollData.forEach((polls, i) => {
-      	const groupWrapperElem = document.createElement('section');
-      	const groupId = i + 1;
-      	const groupWrapperId = this.prefix(`group-wrapper-${groupId}`);
+			pollData.forEach((polls, i) => {
+				const groupWrapperElem = document.createElement('section');
+				const groupId = i + 1;
+				const groupWrapperId = this.prefix(`group-wrapper-${groupId}`);
 				groupWrapperElem.setAttribute('class', this.prefix('group-wrapper'));
 				groupWrapperElem.setAttribute('id', groupWrapperId);
 				wrapperElem.appendChild(groupWrapperElem);
@@ -355,9 +372,9 @@ console.log('#csvFormat',this.#csvFormat);
 					selector: `#${groupWrapperId}`,
 				});
 
-      	polls.forEach((poll, ii) => {
-      		const chartId = this.prefix(`chart-wrapper-${groupId}-${ii}`);
-	      	const chartWrapperElem = document.createElement('section');
+				polls.forEach((poll, ii) => {
+					const chartId = this.prefix(`chart-wrapper-${groupId}-${ii}`);
+					const chartWrapperElem = document.createElement('section');
 					chartWrapperElem.setAttribute('class', this.prefix('chart-wrapper'));
 					chartWrapperElem.setAttribute('id', chartId);
 					groupWrapperElem.appendChild(chartWrapperElem);
